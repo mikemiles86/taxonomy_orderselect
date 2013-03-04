@@ -1,1 +1,8 @@
 name= Taxonomy Orderable Select Widget
+project = taxonomy_orderselect
+description = Add widget type to term reference fields that allows a resortable table of selected terms
+package = Fields
+version = VERSION
+core = 7.x
+dependencies[] = field
+dependencies[] = taxonomy

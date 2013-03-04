@@ -1,0 +1,105 @@
+<?php
+
+	/**
+	 * Implements hook_field_widget_info()
+	 */
+	function taxonomy_orderselect_field_widget_info(){
+		return array(
+			'taxonomy_orderselect' => array(
+				'label' => t('Resortable table of terms (select list)'),
+      'field types' => array('taxonomy_term_reference'),
+      'settings' => array(
+        'size' => 60,
+      ),
+      'behaviors' => array(
+        'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+      ),
+			),
+		);
+	}
+	
+	/**
+	 * Implements hook_field_widget_form()
+	 */
+	function taxonomy_orderselect_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+		
+		switch ($instance['widget']['type']) {
+			case 'taxonomy_orderselect':	
+				// copy what options_select widget does to get the select values for our dropdown
+				// see options.module 
+				$value_key 	= key($field['columns']);
+				$multiple 	= $field['cardinality'] > 1 || $field['cardinality'] == FIELD_CARDINALITY_UNLIMITED;
+				$has_value 	= isset($items[0][$value_key]);
+				$properties = _options_properties('taxonomy_orderselect', $multiple, $element['#required'], $has_value);
+
+				$entity_type 	= $element['#entity_type'];
+				$entity 			= $element['#entity'];
+				// Prepare the list of options.
+				$options 			= _options_get_options($field, $instance, $properties, $entity_type, $entity);
+				//get the default values for the field
+				$default_values = _options_storage_to_form($items, $options, $value_key, $properties);
+				
+				// determine actual cardinality
+				// is cardinality set to unlimted, or is it bigger then the size of the available options?
+				if (($field['cardinality'] == FIELD_CARDINALITY_UNLIMITED) || (sizeof($options) < $field['cardinality'])){	
+					// set the max to the number of options
+					$cardinality = sizeof($options);
+				}else{
+					//else use the specified cardinality
+					$cardinality = $field['cardinality'];
+				}
+				
+				// is cardinality greater then the current delta?
+				if ($cardinality > $delta){
+					//is there a default value for this delta?
+					if (isset($default_values[$delta])){
+						//get default value for this instance
+						$default = array($default_values[$delta]);
+						//limit the options to only this selection
+						$options = array($default_values[$delta] => $options[$default_values[$delta]]);
+					// no default for this delta, assume it is a new instance
+					}else{
+						//value choosen in form state?
+						if (isset($form_state['values'][$field['field_name']][$langcode][$delta]) && isset($options[$form_state['values'][$field['field_name']][$langcode][$delta]['tid']])){
+							$default = array($form_state['values'][$field['field_name']][$langcode][$delta]['tid']);
+						}else{
+							$default = array();
+						}
+						// remove any previously choosen values, since can only reference a term once
+						foreach ($default_values as $tid){
+							if (isset($options[$tid])){
+								unset($options[$tid]);
+							}
+						}
+
+						//remove any selected in previous instances from form state
+						if (isset($form_state['values'][$field['field_name']])){
+							foreach ($form_state['values'][$field['field_name']][$langcode] as $d => $data){
+								if (isset($options[$data['tid']]) && !in_array($data['tid'],$default)){
+									unset($options[$data['tid']]);
+								}
+							}
+						}
+					}
+					//build widget form element
+					$widget = $element + array(
+						'#type' => 'select',
+						//add a 0 option to the options array so that values can be unselected.
+						'#options'	=> array(0=>'--select--')+$options,
+						'#cardinality'	=> $cardinality,
+						'#default_value' => $default,
+						'#attributes' => array('class' => array('taxonomy-order-select')),
+					);
+					//the taxonomy module will handle storing these values and is looking for a 'tid'
+					$element['tid'] = $widget;
+				}else{
+					//reached the cardinality
+					// hide the add more button
+					drupal_add_css('#edit-'.str_replace('_','-',$field['field_name']).'-'.$langcode.'-add-more{display:none;}','inline');
+					//set element to false
+					$element = false;
+				}
+				break;
+		}		
+		return $element;
+	}
